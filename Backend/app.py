@@ -1,142 +1,176 @@
 from datetime import date, timedelta
-
 from flask import Flask, jsonify, request
-
 
 app = Flask(__name__)
 
-# Higher priority = lower number (Exam first, then Project, Quiz, Homework)
-_CATEGORY_PRIORITY = {
-    'Exam': 0,
-    'Project': 1,
-    'Quiz': 2,
-    'Homework': 3,
+# ---------------------------------------------------------------------
+# PRIORITY SYSTEM
+# ---------------------------------------------------------------------
+CATEGORY_PRIORITY = {
+    "Exam": 0,
+    "Project": 1,
+    "Quiz": 2,
+    "Homework": 3,
 }
 
-# Stub users until a database exists (placeholder login only)
-_PLACEHOLDER_USERS = {
-    'demo': 'password123',
+# ---------------------------------------------------------------------
+# AUTH DATA (TEMPORARY - WILL MOVE TO MYSQL LATER)
+# ---------------------------------------------------------------------
+USERS = {
+    "demo": "password123"
 }
 
-_classes: list[dict] = []
-_next_class_id = 1
+# ---------------------------------------------------------------------
+# USER DATA STORE (IN-MEMORY SDLC PHASE 1)
+# ---------------------------------------------------------------------
+data = {
+    "demo": {
+        "classes": [],
+        "assignments": []
+    }
+}
 
-# Each item: id, title, due_date (YYYY-MM-DD), category (Exam|Project|Quiz|Homework)
-_assignments: list[dict] = []
-
-
-# -----------------------------------------------------------------------------
-# General (home, health checks, etc.)
-# -----------------------------------------------------------------------------
-
-
-@app.route('/')
+# ---------------------------------------------------------------------
+# HOME / TEST
+# ---------------------------------------------------------------------
+@app.route("/")
 def home():
-    return 'Welcome to the Class Planner!'
+    return "Class Planner API Running"
 
 
-@app.route('/test')
+@app.route("/test")
 def test():
-    return jsonify(message='API working')
+    return jsonify(message="API working")
 
-
-# -----------------------------------------------------------------------------
-# Auth — login, register, sessions / tokens, password reset, etc.
-# -----------------------------------------------------------------------------
-@app.route('/register', methods=['POST'])
+# ---------------------------------------------------------------------
+# AUTH ROUTES
+# ---------------------------------------------------------------------
+@app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json(silent=True) or {}
-    username = data.get('username')
-    password = data.get('password')
+    body = request.get_json() or {}
+
+    username = body.get("username")
+    password = body.get("password")
 
     if not username or not password:
-        return jsonify(error='username and password are required'), 400
+        return jsonify(error="username and password required"), 400
 
-    # No persistence yet — stub success response
-    return jsonify(message='User registered successfully', username=username), 201
+    if username in USERS:
+        return jsonify(error="user already exists"), 409
+
+    USERS[username] = password
+    data[username] = {"classes": [], "assignments": []}
+
+    return jsonify(message="User registered successfully"), 201
 
 
-@app.route('/login', methods=['POST'])
+@app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = (data.get('password') or '').strip()
+    body = request.get_json() or {}
 
-    if not username or not password:
-        return jsonify(error='username and password are required'), 400
+    username = body.get("username")
+    password = body.get("password")
 
-    if len(username) < 3:
-        return jsonify(error='username must be at least 3 characters'), 400
+    if USERS.get(username) != password:
+        return jsonify(error="invalid credentials"), 401
 
-    if len(password) < 6:
-        return jsonify(error='password must be at least 6 characters'), 400
+    return jsonify(message="login successful", user=username), 200
 
-    expected = _PLACEHOLDER_USERS.get(username)
-    if expected is None or expected != password:
-        return jsonify(error='invalid username or password'), 401
-
-    return jsonify(message='Login successful', username=username), 200
+# ---------------------------------------------------------------------
+# CLASSES
+# ---------------------------------------------------------------------
+@app.route("/classes/<user>", methods=["GET"])
+def get_classes(user):
+    return jsonify(classes=data[user]["classes"])
 
 
-# -----------------------------------------------------------------------------
-# Classes — courses, schedules, sections, enrollment, etc.
-# -----------------------------------------------------------------------------
+@app.route("/classes/<user>", methods=["POST"])
+def add_class(user):
+    body = request.get_json() or {}
 
-
-@app.route('/classes', methods=['GET'])
-def list_classes():
-    return jsonify(classes=_classes)
-
-
-@app.route('/classes', methods=['POST'])
-def add_class():
-    global _next_class_id
-
-    data = request.get_json(silent=True) or {}
-    name = (data.get('name') or '').strip()
-    subject = (data.get('subject') or '').strip()
+    name = body.get("name")
+    subject = body.get("subject")
 
     if not name or not subject:
-        return jsonify(error='name and subject are required'), 400
+        return jsonify(error="name and subject required"), 400
 
     new_class = {
-        'id': _next_class_id,
-        'name': name,
-        'subject': subject,
+        "id": len(data[user]["classes"]) + 1,
+        "name": name,
+        "subject": subject
     }
-    _classes.append(new_class)
-    _next_class_id += 1
+
+    data[user]["classes"].append(new_class)
 
     return jsonify(new_class), 201
 
+# ---------------------------------------------------------------------
+# ASSIGNMENTS
+# ---------------------------------------------------------------------
+@app.route("/assignments/<user>", methods=["GET"])
+def get_assignments(user):
+    return jsonify(assignments=data[user]["assignments"])
 
-# -----------------------------------------------------------------------------
-# Assignments — tasks, due dates, submissions, etc.
-# -----------------------------------------------------------------------------
+
+@app.route("/assignments/<user>", methods=["POST"])
+def add_assignment(user):
+    body = request.get_json() or {}
+
+    assignment = {
+        "id": len(data[user]["assignments"]) + 1,
+        "class_id": body.get("class_id"),
+        "title": body.get("title"),
+        "due_date": body.get("due_date"),  # YYYY-MM-DD
+        "category": body.get("category"),
+        "priority": body.get("priority", 3),
+        "completed": False
+    }
+
+    data[user]["assignments"].append(assignment)
+
+    return jsonify(assignment), 201
 
 
-@app.route('/reminders', methods=['GET'])
-def generate_reminders():
+@app.route("/assignments/<user>/<int:aid>", methods=["PUT"])
+def mark_completed(user, aid):
+    for a in data[user]["assignments"]:
+        if a["id"] == aid:
+            a["completed"] = True
+            return jsonify(a)
+
+    return jsonify(error="assignment not found"), 404
+
+# ---------------------------------------------------------------------
+# REMINDERS
+# ---------------------------------------------------------------------
+@app.route("/reminders/<user>", methods=["GET"])
+def generate_reminders(user):
     today = date.today()
-    last_day = today + timedelta(days=6)  # next 7 calendar days including today
+    end = today + timedelta(days=7)
 
     upcoming = []
-    for a in _assignments:
-        try:
-            due = date.fromisoformat(a['due_date'])
-        except (KeyError, TypeError, ValueError):
+
+    for a in data[user]["assignments"]:
+        if a.get("completed"):
             continue
-        if today <= due <= last_day:
+
+        try:
+            due = date.fromisoformat(a["due_date"])
+        except:
+            continue
+
+        if today <= due <= end:
             upcoming.append(a)
 
     upcoming.sort(
-        key=lambda a: (
-            _CATEGORY_PRIORITY.get(a.get('category'), 99),
-            a.get('due_date', ''),
+        key=lambda x: (
+            CATEGORY_PRIORITY.get(x.get("category"), 99),
+            x.get("due_date", "")
         )
     )
+
     return jsonify(reminders=upcoming)
 
-
-if __name__ == '__main__':
+# ---------------------------------------------------------------------
+if __name__ == "__main__":
     app.run(debug=True)
