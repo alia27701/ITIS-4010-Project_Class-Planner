@@ -39,7 +39,8 @@ For this system, it follows a 3-tier architecture:
 - For degraded, AI had more inconsistent ideas with the SDLC and the code where it would either contradict what I was trying to do or end up giving me code that could of broken the system.
 ## Supporting Context Files
 - architecture.md: Structure of the design and system
-- 
+- Security.md: A breakthrough of the security in the system
+- gpt.md: What AI I used and how I used them
 ## ChatGPT Conversation
 ### Here is the full conversation between ChatGPT and I
 https://chatgpt.com/share/69f566eb-d92c-83ea-99ad-d0b86e84c409
