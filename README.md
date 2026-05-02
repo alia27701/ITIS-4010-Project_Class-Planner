@@ -13,4 +13,11 @@ For this system, it follows a 3-tier architecture:
 - Backend
   - Python + Flask
 - Database
-  - MySQL
+  - MySQL (storing the information of the users credentials)
+ 
+## AI Models Used
+- ChatGPT: Used for SDLC planning, Requirement Engineering, System & UI design, and Testing Strategies
+- Cursor AI: Used for generating backend Flask Code for API routes for authentication, classes, assignments, and reminders.
+
+## AI Engineering Analysis
+### Strengths of AI Tools
